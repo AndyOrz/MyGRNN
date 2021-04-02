@@ -1,32 +1,24 @@
-# 要添加一个新单元，输入 '# %%'
-# 要添加一个新的标记单元，输入 '# %% [markdown]'
-# %%
 import torch
 import torch.nn as nn
 import dgl
-from dgl.nn import GATConv
+import dgl.nn.pytorch as dglnn
 
-# %% [markdown]
-# ### GRUCell
-
-# %%
-#图卷积GRU单元
+# %%  图卷积GRU单元
 class GRUCell(nn.Module):
-    def __init__(self, input_size:int, hidden_size:int, **kwargs):
+    def __init__(self, input_size:int, hidden_size:int):
         """
         参数：
         input_size  输入尺寸
         hidden_size 输出尺寸/隐藏尺寸
-        **kwargs    传递给图卷积层的其它参数
         若是GAT，则至少还有num_heads
 
         输出与隐藏状态之间经过线性变换
         """
         super(GRUCell, self).__init__() #父类初始化函数
         #生成卷积层
-        self.ConvIR = GATConv(input_size + hidden_size, hidden_size, allow_zero_in_degree=True, **kwargs)
-        self.ConvIZ = GATConv(input_size + hidden_size, hidden_size, allow_zero_in_degree=True, **kwargs)
-        self.ConvIH = GATConv(input_size + hidden_size, hidden_size, allow_zero_in_degree=True, **kwargs)
+        self.ConvIR = dglnn.GraphConv(input_size + hidden_size, hidden_size, allow_zero_in_degree=True)
+        self.ConvIZ = dglnn.GraphConv(input_size + hidden_size, hidden_size, allow_zero_in_degree=True)
+        self.ConvIH = dglnn.GraphConv(input_size + hidden_size, hidden_size, allow_zero_in_degree=True)
 
 
     def forward(self, g, input, hx):
@@ -46,24 +38,22 @@ class GRUCell(nn.Module):
 
         #连接输入和隐藏状态 => [N, num_feats+hidden_size]
         inputvalue = torch.cat([input, hx],dim=1)
+        # print(g.device, inputvalue.device)
 
         r = torch.sigmoid(self.ConvIR(g, inputvalue)) #重置门
         z = torch.sigmoid(self.ConvIZ(g, inputvalue)) #更新门
 
-        print(inputvalue.shape)
-        print(r.shape,hx.shape)
+        # print(inputvalue.shape)
+        # print(r.shape,hx.shape)
         h = torch.tanh(self.ConvIH(g, torch.cat([input, r * hx], dim=1))) #新记忆
 
         new_state = z * hx + (1.0 - z) * h #融合新记忆和旧记忆
 
         return new_state
 
-# %% [markdown]
-# ## Encoder
-
-# %%
+# %% Encoder
 class Encoder(nn.Module):
-    def __init__(self, input_size:int, hidden_size:int, num_layers:int, **kwargs):
+    def __init__(self, input_size:int, hidden_size:int, num_layers:int, device:str):
         """
         使用GRUCell的编码器
 
@@ -74,16 +64,17 @@ class Encoder(nn.Module):
         **kwargs         GRU的其他参数
         """
         super(Encoder, self).__init__()
+        self.device = device
         self._num_layers = num_layers
         self._hidden_size = hidden_size
 
         #除了第一层输入维数为input_size，输出维数为hidden_size
         #之后的每一层的GRU的输入输出维数相同为hidden_size
         #所有GRU上一层的输出作为下一层的输入，隐藏状态来自自身的上一时刻输出
-        self.GRUs = nn.ModuleList([ GRUCell(input_size, hidden_size, **kwargs) if i == 0
-                                   else GRUCell(hidden_size, hidden_size, **kwargs) 
+        self.GRUs = nn.ModuleList([ GRUCell(input_size, hidden_size) if i == 0
+                                   else GRUCell(hidden_size, hidden_size)
                                    for i in range(self._num_layers)])
-        
+
 
     def forward(self, g, input, hx=None):
         """
@@ -99,7 +90,7 @@ class Encoder(nn.Module):
         """
         #对序列首个输入进行初始化
         if hx is None:
-            hx = input.new_zeros((self._num_layers, input.shape[0], self._hidden_size))
+            hx = torch.zeros((self._num_layers, input.shape[0], self._hidden_size)).to(self.device)
 
         hidden_states = []
         output = input
@@ -113,12 +104,9 @@ class Encoder(nn.Module):
 
         return torch.stack(hidden_states)
 
-# %% [markdown]
-# ## Decoder
-
-# %%
+# %% Decoder
 class Decoder(nn.Module):
-    def __init__(self, hidden_size:int, output_size:int, num_layers:int, proj:bool=True, proj_settings={'bias':True} ,**kwargs):
+    def __init__(self, hidden_size:int, output_size:int, num_layers:int, device:str, proj:bool=True):
         """
         上一时刻预测结果将作为本次预测的输入，所以输入输出必须等大小
         参数：
@@ -130,6 +118,7 @@ class Decoder(nn.Module):
         **kwargs         GRU的其他参数
         """
         super(Decoder,self).__init__()
+        self.device = device
         assert hidden_size==output_size or proj, "若不使用投影层，输出维度与隐藏状态尺寸必须保持一致。"
         self._num_layers = num_layers
         self._output_size = output_size
@@ -139,11 +128,11 @@ class Decoder(nn.Module):
         #除了第一层输入维数为output_size，输出维数为hidden_size
         #之后的每一层的GRU的输入输出维数相同为hidden_size
         #所有GRU上一层的输出作为下一层的输入，隐藏状态来自自身的上一时刻输出
-        self.GRUs = nn.ModuleList([ GRUCell(output_size, hidden_size, **kwargs) if i == 0
-                                   else GRUCell(hidden_size, hidden_size, **kwargs)
+        self.GRUs = nn.ModuleList([ GRUCell(output_size, hidden_size) if i == 0
+                                   else GRUCell(hidden_size, hidden_size)
                                    for i in range(self._num_layers)])
-        
-        self.projection_layer = nn.Linear(self._hidden_size, self._output_size, **proj_settings) if proj else None
+
+        self.projection_layer = nn.Linear(self._hidden_size, self._output_size) if proj else None
 
     def forward(self, g, input, hx):
         """
@@ -171,14 +160,10 @@ class Decoder(nn.Module):
 
         return output, torch.stack(hidden_states)
 
-# %% [markdown]
-# # MyModel
-
-# %%
-#seq2seq 模型
+# %% MyModel seq2seq 模型
 class MyModel(nn.Module):
     def __init__(self,num_feats:int, output_dim:int, hidden_size:int, num_layers:int,
-                 seq_len:int, horizon:int, **kwargs):
+                 seq_len:int, horizon:int, device:str):
         """
         初始化Encoder-Decoder模型
         输入数据参数：
@@ -196,24 +181,29 @@ class MyModel(nn.Module):
         **kwargs        其他参数
         """
         super(MyModel,self).__init__() #父类初始化函数
+        self.device = device
 
         self._num_feats = num_feats                  #输入参数
+        self._embedded_feats = 16
         self._output_dim = output_dim                #输出参数
 
         self._num_layers = num_layers                #超参数-网络层数
         self._hidden_size = hidden_size              #超参数-记忆尺度
-        
+
         #模块
-        self.encoder_model = Encoder(input_size = self._num_feats,
+        self.features_encoder = nn.Linear(self._num_feats, self._embedded_feats) #将输入的feature做embed
+        self.encoder_model = Encoder(input_size = self._embedded_feats,
                                      hidden_size = self._hidden_size,
-                                     num_layers = self._num_layers, **kwargs)
+                                     num_layers = self._num_layers,
+                                     device=device)
 
         self.decoder_model = Decoder(output_size = self._output_dim,
                                      hidden_size = self._hidden_size,
-                                     num_layers = self._num_layers, **kwargs)
+                                     num_layers = self._num_layers,
+                                     device=device)
         #可能根据预测需求变化的参数
-        self.seq_len = seq_len 
-        self.horizon = horizon 
+        self.seq_len = seq_len
+        self.horizon = horizon
 
 
     def forward(self, g, x, y=None, p=0):
@@ -234,8 +224,10 @@ class MyModel(nn.Module):
         self._N = x.shape[1]
         assert g.num_nodes() == self._N, "参数 g 和 x 中的节点数量不同, {}, {}".format(g.num_nodes() ,self._N) #debug
 
+        # embed
+        embedded_input = self.features_encoder(x)
         #编码
-        encoder_hidden_state = self.encode(g, x)
+        encoder_hidden_state = self.encode(g, embedded_input)
         #解码
         outputs = self.decode(g, encoder_hidden_state, truth=y, p=p) #可以考虑采用最后一个输入作为启动
         return outputs
@@ -256,7 +248,7 @@ class MyModel(nn.Module):
         encoder_hidden_state = None
         for t in range(self.seq_len):
             encoder_hidden_state = self.encoder_model(g, x[t], encoder_hidden_state)
-            
+
         return encoder_hidden_state
 
 
@@ -276,7 +268,7 @@ class MyModel(nn.Module):
         """
         #若未指定启动序列，则输入全0
         #dtype和device与encoder_hidden_state相同
-        decoder_input = encoder_hidden_state.new_zeros((self._N, self._output_dim)) if startup_seq is None else startup_seq
+        decoder_input = encoder_hidden_state.new_zeros((self._N, self._output_dim)).to(self.device) if startup_seq is None else startup_seq
 
         decoder_hidden_state = encoder_hidden_state
 
@@ -291,5 +283,3 @@ class MyModel(nn.Module):
                     decoder_input = truth[t]
 
         return torch.stack(outputs)
-
-
