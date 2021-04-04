@@ -65,7 +65,7 @@ class HighD_Dataset(DGLDataset):
         for idx, _id in enumerate(node_set):
             id_map[_id] = idx
 
-        num_feats = 2 #暂时只用到x,y坐标作为features
+        num_feats = 4 #暂时只用到x,y坐标作为features
         X = {"graph":[],"feature":torch.zeros((self.X_len,num_nodes,num_feats))}
         Y = {"graph":[],"feature":torch.zeros((self.Y_len,num_nodes,num_feats))}
 
@@ -77,7 +77,7 @@ class HighD_Dataset(DGLDataset):
             # 对节点id进行更新
             for old_id, new_id in enumerate(new_ids):
                 new_edges[edges==old_id] = new_id
-                X["feature"][seq_idx,new_id,:]=torch.from_numpy(self.features[frame_id][old_id,0:2])
+                X["feature"][seq_idx,new_id,:]=torch.from_numpy(self.features[frame_id][old_id,0:4])
             X["graph"].append(dgl.graph((new_edges[0],new_edges[1]),num_nodes=num_nodes))
 
         for seq_idx, frame_id in enumerate(Y_indexs):
@@ -87,7 +87,7 @@ class HighD_Dataset(DGLDataset):
             # 对节点id进行更新
             for old_id, new_id in enumerate(new_ids):
                 new_edges[edges==old_id] = new_id
-                Y["feature"][seq_idx,new_id,:]=torch.from_numpy(self.features[frame_id][old_id,0:2])
+                Y["feature"][seq_idx,new_id,:]=torch.from_numpy(self.features[frame_id][old_id,0:4])
             Y["graph"].append(dgl.graph((new_edges[0],new_edges[1]),num_nodes=num_nodes))
 
 
