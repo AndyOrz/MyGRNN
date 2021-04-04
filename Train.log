@@ -270,3 +270,17 @@ ERROR:root:Traceback (most recent call last):
 RuntimeError: mat1 and mat2 shapes cannot be multiplied (50x2 and 4x16)
 
 INFO:root:End Time: 2021-04-04 19:27:24.979086
+INFO:root:
+*********************** 2021-04-04 19:28:08.090988 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+INFO:root:1 train_loss: 70.586913
+INFO:root:checkpoint saved in ckpts/0404_multi_G/.
+ERROR:root:Traceback (most recent call last):
+  File "train.py", line 264, in <module>
+    val_loss = ctl.eval_multi_graph()
+  File "train.py", line 178, in eval_multi_graph
+    output = self.model(graph, X_feature*mask)  #[1,N,2]
+NameError: name 'graph' is not defined
+
+INFO:root:End Time: 2021-04-04 20:06:45.598537

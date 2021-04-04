@@ -175,7 +175,7 @@ class Trainer:
                 mask[9,np.random.randint(mask.shape[1]),:]=0
                 mask = mask.to(self.device)
 
-                output = self.model(graph, X_feature*mask)  #[1,N,2]
+                output = self.model(X['graph'], X_feature*mask)  #[1,N,2]
                 loss = self.criterion(output,Y_feature,mask)
 
                 losses.update(loss.item())

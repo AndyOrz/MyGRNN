@@ -24,6 +24,9 @@ class MyLoss(nn.Module):
         predict_by_mask = predict[0,mask[9,...]==0].view(-1,self._num_feats)
         truth_by_mask = truth[0,mask[9,...]==0].view(-1,self._num_feats)
         if self._num_feats == 4:
-            return F.l1_loss(predict_by_mask[:,0:2], truth_by_mask[:,0:2])+F.l1_loss(predict_by_mask[:,2:4], truth_by_mask[:,2:4])*10
+            # 位置loss采用欧几里得距离，速度loss采用L1 loss
+            pos_loss = ((predict_by_mask[:,0]-truth_by_mask[:,0])**2+(predict_by_mask[:,1]-truth_by_mask[:,1])**2)**0.5
+            v_loss = F.l1_loss(predict_by_mask[:,2:4], truth_by_mask[:,2:4])
+            return pos_loss + v_loss
         else:
             return F.l1_loss(predict_by_mask, truth_by_mask)
