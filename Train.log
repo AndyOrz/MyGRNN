@@ -1,0 +1,188 @@
+INFO:root:
+*********************** 2021-04-03 14:43:10.489624 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+ERROR:root:Traceback (most recent call last):
+  File "train.py", line 227, in <module>
+    ctl = Trainer(modelconfig, device='cpu')
+  File "train.py", line 34, in __init__
+    self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=config["lr"])
+AttributeError: 'Trainer' object has no attribute 'model'
+
+INFO:root:End Time: 2021-04-03 14:43:10.521633
+INFO:root:
+*********************** 2021-04-03 14:43:35.009842 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+ERROR:root:Traceback (most recent call last):
+  File "train.py", line 227, in <module>
+    ctl = Trainer(modelconfig, device='cpu')
+  File "train.py", line 39, in __init__
+    self.scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
+NameError: name 'optimizer' is not defined
+
+INFO:root:End Time: 2021-04-03 14:43:35.023837
+INFO:root:
+*********************** 2021-04-03 14:45:23.222687 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+ERROR:root:Traceback (most recent call last):
+  File "train.py", line 232, in <module>
+    ctl = Trainer(modelconfig, device='cpu')
+  File "train.py", line 51, in __init__
+    self.train_dataloader = GraphDataLoader(train_dataset, batch_size=1, num_workers=4,shuffle=True, pin_memory=(self.device.type == "cuda"))
+AttributeError: 'str' object has no attribute 'type'
+
+INFO:root:End Time: 2021-04-03 14:45:30.319853
+INFO:root:
+*********************** 2021-04-03 14:46:03.190032 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+ERROR:root:Traceback (most recent call last):
+  File "train.py", line 245, in <module>
+    timer = Timer()
+NameError: name 'Timer' is not defined
+
+INFO:root:End Time: 2021-04-03 14:46:10.113371
+INFO:root:
+*********************** 2021-04-03 14:46:37.826361 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+ERROR:root:Traceback (most recent call last):
+  File "train.py", line 247, in <module>
+    train_loss = ctl.train()
+  File "train.py", line 73, in train
+    with tqdm(total=len(train_dataloader)) as pbar:
+NameError: name 'train_dataloader' is not defined
+
+INFO:root:End Time: 2021-04-03 14:46:44.695663
+INFO:root:
+*********************** 2021-04-03 14:47:33.976839 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+INFO:root:End Time: 2021-04-03 14:48:40.653545
+INFO:root:
+*********************** 2021-04-03 14:49:42.106516 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+INFO:root:End Time: 2021-04-03 14:50:40.848414
+INFO:root:
+*********************** 2021-04-03 14:51:00.989059 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+DEBUG:root:创建存档目录:ckpts/0403/
+INFO:root:End Time: 2021-04-03 14:51:53.232129
+INFO:root:
+*********************** 2021-04-03 14:52:31.553097 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+INFO:root:End Time: 2021-04-03 14:52:53.377240
+INFO:root:
+*********************** 2021-04-03 14:53:06.469674 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+INFO:root:End Time: 2021-04-03 14:53:21.220862
+INFO:root:
+*********************** 2021-04-03 14:53:44.267702 **************************
+
+INFO:root:调用参数：Namespace(ckp=None, config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+INFO:root:0 train_loss: 78.956352
+INFO:root:checkpoint saved in ckpts/0403/.
+ERROR:root:Traceback (most recent call last):
+  File "train.py", line 272, in <module>
+    val_time_use = timer.skip()
+NameError: name 'timer' is not defined
+
+INFO:root:End Time: 2021-04-03 15:37:18.208581
+INFO:root:
+*********************** 2021-04-03 15:41:30.546684 **************************
+
+INFO:root:调用参数：Namespace(ckp='ckpts/0403/ckp0.pth', config='ModelConfig.json', epoch=None, fckp=1, fval=1)
+INFO:root:0 train_loss: 45.790991
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 31.717053 
+INFO:root:0 train_loss: 28.287078
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 23.856771 
+INFO:root:0 train_loss: 22.190350
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 20.853026 
+INFO:root:0 train_loss: 19.535108
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 16.908775 
+INFO:root:0 train_loss: 17.969456
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 15.548242 
+INFO:root:0 train_loss: 16.947850
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 15.249601 
+INFO:root:0 train_loss: 16.002578
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 15.475061 
+INFO:root:0 train_loss: 15.427258
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 15.211896 
+INFO:root:0 train_loss: 14.925293
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 16.952831 
+INFO:root:0 train_loss: 14.448718
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 15.870107 
+INFO:root:0 train_loss: 14.147604
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 14.672885 
+INFO:root:0 train_loss: 13.766135
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 12.769289 
+INFO:root:0 train_loss: 13.541064
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 13.461419 
+INFO:root:0 train_loss: 13.315623
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 12.156487 
+INFO:root:0 train_loss: 13.164373
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 11.754120 
+INFO:root:0 train_loss: 12.952281
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 12.333843 
+INFO:root:0 train_loss: 12.655052
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 13.427515 
+INFO:root:0 train_loss: 12.609757
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 11.907209 
+INFO:root:0 train_loss: 12.491516
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 11.217792 
+INFO:root:0 train_loss: 12.425653
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 12.914047 
+INFO:root:0 train_loss: 12.334461
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 13.268844 
+INFO:root:0 train_loss: 12.264316
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 12.684110 
+INFO:root:0 train_loss: 12.004136
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 13.833743 
+INFO:root:0 train_loss: 11.992806
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 11.495582 
+INFO:root:0 train_loss: 11.878555
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 12.806410 
+INFO:root:0 train_loss: 11.972847
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 11.385729 
+INFO:root:0 train_loss: 11.774040
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 11.176768 
+INFO:root:0 train_loss: 11.729100
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 11.996260 
+INFO:root:0 train_loss: 11.635381
+INFO:root:checkpoint saved in ckpts/0403/.
+INFO:root:0 val_loss: 13.443430 
+INFO:root:End Time: 2021-04-04 13:13:17.689700
