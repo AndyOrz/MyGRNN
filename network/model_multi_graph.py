@@ -30,7 +30,6 @@ class MyModel(nn.Module):
         self.device = device
 
         self._num_feats = num_feats                  #输入参数
-        self._embedded_feats = 16
         self._output_dim = output_dim                #输出参数
 
         self._num_layers = num_layers                #超参数-网络层数
@@ -39,13 +38,12 @@ class MyModel(nn.Module):
         self._bidirectional = bidirectional          #是否为双向网络
 
         #模块
-        self.features_encoder = nn.Linear(self._num_feats, self._embedded_feats) #将输入的feature做embed
-        self.encoder_model = Encoder(input_size = self._embedded_feats,
+        self.encoder_model = Encoder(input_size = self._num_feats,
                                      hidden_size = self._hidden_size,
                                      num_layers = self._num_layers,
                                      device=device)
         if self._bidirectional:
-            self.reverse_encoder_model = Encoder(input_size = self._embedded_feats,
+            self.reverse_encoder_model = Encoder(input_size = self._num_feats,
                                         hidden_size = self._hidden_size,
                                         num_layers = self._num_layers,
                                         device=device)
@@ -59,39 +57,33 @@ class MyModel(nn.Module):
         self.horizon = horizon
 
 
-    def forward(self, g, x, y=None, p=0):
+    def forward(self, g_x, g_y, p=0):
         """
         向前传播
 
         参数：
-        g [seq_len] -> dgl.graph
-        x [seq_len, N ,num_feats] 输入序列
-        y [horizon, N ,num_feats] 输出序列的真值（可选）
+        g_x [in_seq_len] -> dgl.graph
+        g_y [out_seq_len] -> dgl.graph
         p 在decode阶段给予真值的概率（默认：0）
 
         输出：
         torch.tensor
         [horizon, N, output_dim] 预测时间长度 * 节点数 * 输出属性数
         """
-        #N是可变的，正常输入为节点数，当使用mini-batch时为节点数*batch_size
-        self._N = x.shape[1]
-        assert g[0].num_nodes() == self._N, "参数 g 和 x 中的节点数量不同, {}, {}".format(g[0].num_nodes() ,self._N) #debug
+        self._N = g_x[0].num_nodes()
 
-        # embed
-        embedded_input = self.features_encoder(x)
         #编码
-        encoder_hidden_state = self.encode(g, embedded_input)
+        encoder_hidden_state = self.encode(g_x)
         #解码
-        outputs = self.decode(g, encoder_hidden_state, truth=y, p=p) #可以考虑采用最后一个输入作为启动
+        outputs = self.decode(g_y, encoder_hidden_state, p=p) #可以考虑采用最后一个输入作为启动
         return outputs
 
 
-    def encode(self, g, x):
+    def encode(self, g_x):
         """
         将时间序列，逐个输入编码网络中
         参数：
         g [seq_len] -> dgl.graph
-        x [seq_len, N ,num_feats] 输入序列
 
         输出
         torch.tensor
@@ -100,21 +92,21 @@ class MyModel(nn.Module):
         """
         encoder_hidden_state = None
         for t in range(self.seq_len):
-            encoder_hidden_state = self.encoder_model(g[t], x[t], encoder_hidden_state)
+            encoder_hidden_state = self.encoder_model(g_x[t], encoder_hidden_state)
         
         reverse_encoder_hidden_state = None
         if self._bidirectional:            
             for t in range(self.seq_len):
-                reverse_encoder_hidden_state = self.reverse_encoder_model(g[-t], x[-t], reverse_encoder_hidden_state)
+                reverse_encoder_hidden_state = self.reverse_encoder_model(g_x[-t], reverse_encoder_hidden_state)
 
         return torch.cat((encoder_hidden_state,reverse_encoder_hidden_state),dim=2) if self._bidirectional else encoder_hidden_state
 
 
-    def decode(self, g, encoder_hidden_state, startup_seq=None, truth=None, p=0):
+    def decode(self, g_y, encoder_hidden_state, startup_seq=None, p=0):
         """
         逐个生成序列
         参数：
-        g [seq_len] -> dgl.graph
+        g_y [out_seq_len] -> dgl.graph
         encoder_hidden_state [num_layers, N, hidden_size*num_directions] 编码结果
         startup_seq          [N, output_dim]                             启动值（默认值：全0张量）
 
@@ -133,11 +125,11 @@ class MyModel(nn.Module):
         outputs = []
 
         for t in range(self.horizon):
-            decoder_input, decoder_hidden_state = self.decoder_model(g[t], decoder_input, decoder_hidden_state)
+            decoder_input, decoder_hidden_state = self.decoder_model(g_y[t], decoder_input, decoder_hidden_state)
             outputs.append(decoder_input)
             #以一定概率给予真值
-            if self.training and truth is not None:
+            if self.training and p>0:
                 if np.random.uniform(0, 1) < p:
-                    decoder_input = truth[t]
+                    decoder_input = g_y[t].ndata['feature']
 
         return torch.stack(outputs)

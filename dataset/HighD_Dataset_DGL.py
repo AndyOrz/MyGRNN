@@ -5,17 +5,27 @@ from dgl.data import DGLDataset
 import dgl
 import torch
 import pickle
+from tqdm import tqdm
 
 
 class HighD_Dataset(DGLDataset):
 
-    def __init__(self, X_len, X_step, Y_len, Y_step, diff=0, mask_rate=0.2,
+    def __init__(self, X_len, X_step, Y_len, Y_step, diff:int=0, mask_rate:float=0.2, preprocess_all:bool=False, device:str='cpu',
                  url=None,
-                 name=None, #data_22
-                 raw_dir=None, #'./data/HighD/'
+                 name=None, # data_22
+                 raw_dir=None, # './data/HighD/'
                  save_dir=None,
                  force_reload=False,
                  verbose=False):
+
+        self.X_len = X_len
+        self.X_step = X_step
+        self.diff = diff
+        self.Y_len = Y_len
+        self.Y_step = Y_step
+        self.mask_rate = mask_rate
+        self.preprocess_all = preprocess_all
+        self.device = device
         super(HighD_Dataset, self).__init__(name=name,
                                         url=url,
                                         raw_dir=raw_dir,
@@ -33,25 +43,29 @@ class HighD_Dataset(DGLDataset):
 
         mask_rate: 在Y中，屏蔽多少比例的数据点（至少屏蔽1个）
         '''
-        self.X_len = X_len
-        self.X_step = X_step
-        self.diff = diff
-        self.Y_len = Y_len
-        self.Y_step = Y_step
-        self.mask_rate = mask_rate
 
     def process(self):
         # 原始数据的性质
         f = open(self.raw_path+'.pkl','rb')
         self.graphs, self.id_maps, self.features = pickle.load(f)
 
-    def __getitem__(self, index):
+        if self.preprocess_all:
+            self.X = []
+            self.Y = []
+            print("preprocessing all data...")
+            for i in tqdm(range(self.__len__())):
+                x, y = self._create_frame(i)
+                self.X.append(x)
+                self.Y.append(y)
+
+    def _create_frame(self, index):
         '''
         输出：
-        X:{"graph":[dgl.graph],"feature":torch.Tensor(in_seq_len,num_nodes,num_feats)}
-        Y:{"graph":[dgl.graph],"feature":torch.Tensor(out_seq_len,num_nodes,num_feats)}
-        mask:torch.Tensor(in_seq_len,num_nodes,num_feats)
+        X:[in_seq_len]->dgl.graph   ( g.ndata["feature"]:torch.Tensor(num_nodes,num_feats), g.ndata["mask"]:torch.Tensor(num_nodes,num_feats) )
+        Y:[out_seq_len]->dgl.graph   ( g.ndata["feature"]:torch.Tensor(num_nodes,num_feats) )
+
         '''
+        np.random.seed(2021)
 
         X_indexs = [i*self.X_step+index for i in range(self.X_len)]
         Y_indexs = [i*self.Y_step+index+self.diff for i in range(self.Y_len)]
@@ -65,9 +79,10 @@ class HighD_Dataset(DGLDataset):
         for idx, _id in enumerate(node_set):
             id_map[_id] = idx
 
-        num_feats = 4 #暂时只用到x,y坐标作为features
-        X = {"graph":[],"feature":torch.zeros((self.X_len,num_nodes,num_feats))}
-        Y = {"graph":[],"feature":torch.zeros((self.Y_len,num_nodes,num_feats))}
+        num_feats = 2 #暂时只用到x,y坐标作为features
+
+        X = []
+        Y = []
 
         # 将graph复制到X,Y,GT中，补全graph节点，将features填入对应位置
         for seq_idx, frame_id in enumerate(X_indexs):
@@ -75,31 +90,39 @@ class HighD_Dataset(DGLDataset):
             edges = self.graphs[frame_id].adj().coalesce().indices()
             new_edges = edges.clone()
             # 对节点id进行更新
+            feature = torch.zeros((num_nodes,num_feats))
             for old_id, new_id in enumerate(new_ids):
                 new_edges[edges==old_id] = new_id
-                X["feature"][seq_idx,new_id,:]=torch.from_numpy(self.features[frame_id][old_id,0:4])
-            X["graph"].append(dgl.graph((new_edges[0],new_edges[1]),num_nodes=num_nodes))
+                feature[new_id,:]=torch.from_numpy(self.features[frame_id][old_id,0:num_feats])
+            X.append(dgl.graph((new_edges[0],new_edges[1]),num_nodes=num_nodes))
+            X[-1].ndata['feature'] = feature
+            # 每帧只mask一辆车            
+            mask = torch.ones((num_nodes,num_feats),dtype=torch.uint8)
+            if num_nodes>0:
+                mask[np.random.randint(num_nodes),:]=0
+            X[-1].ndata['mask'] = mask
+            
 
         for seq_idx, frame_id in enumerate(Y_indexs):
             new_ids = [id_map[id] for id in self.id_maps[frame_id]]
             edges = self.graphs[frame_id].adj().coalesce().indices()
             new_edges = edges.clone()
             # 对节点id进行更新
+            feature = torch.zeros((num_nodes,num_feats))
             for old_id, new_id in enumerate(new_ids):
                 new_edges[edges==old_id] = new_id
-                Y["feature"][seq_idx,new_id,:]=torch.from_numpy(self.features[frame_id][old_id,0:4])
-            Y["graph"].append(dgl.graph((new_edges[0],new_edges[1]),num_nodes=num_nodes))
+                feature[new_id,:]=torch.from_numpy(self.features[frame_id][old_id,0:num_feats])
+            Y.append(dgl.graph((new_edges[0],new_edges[1]),num_nodes=num_nodes))
+            Y[-1].ndata['feature'] = feature
 
+        return [x.to(self.device) for x in X], [y.to(self.device) for y in Y]
 
-        # 对Y生成mask
-        np.random.seed(2021)
-        mask = np.random.random(size=X["feature"].shape)
-        mask[mask>self.mask_rate] = 1
-        mask[mask<self.mask_rate] = 0
-        # TODO:判断是否至少有一个mask
+    def __getitem__(self, index):
+        if self.preprocess_all:
+            return self.X[index], self.Y[index]
+        else:
+            return self._create_frame(index)
 
-
-        return X, Y, mask
 
     def __len__(self):
         return len(self.graphs)-(self.diff+(self.Y_len-1)*self.Y_step+1)+1
@@ -124,4 +147,3 @@ if __name__ == "__main__":
         #     print(mask[0,10])
         #     nx.draw(X["graph"][10].to_networkx(), with_labels=True)
         #     plt.show()
- 

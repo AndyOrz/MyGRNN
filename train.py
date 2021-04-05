@@ -32,26 +32,27 @@ class Trainer:
         else:
             self.device = device
 
-        self.model = MyModel(num_feats=4, output_dim=4, hidden_size=64, num_layers=2,seq_len=10, horizon=1, device=self.device).to(self.device)
+        self.model = MyModel(num_feats=config['num_feats'], output_dim=config['num_feats'], hidden_size=64, num_layers=2,seq_len=10, horizon=1, device=self.device, bidirectional=True).to(self.device)
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=config["lr"])
-        self.criterion = MyLoss(num_feats=4)
+        self.criterion = MyLoss(num_feats=config['num_feats']).to(self.device)
         #学习率计划√
         # Scheduler https://arxiv.org/pdf/1812.01187.pdf
         epochs = config['epochs']
-        lf = lambda x: (((1 + math.cos(x * math.pi / epochs)) / 2) ** 1.0) * 0.95 + 0.05  # 先用了个适用于image classification的lr函数
-        self.scheduler = lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lf)
-        self.scheduler.last_epoch = 0
+        # lf = lambda x: (((1 + math.cos(x * math.pi / epochs)) / 2) ** 1.0) * 0.95 + 0.05  # 先用了个适用于image classification的lr函数
+        # self.scheduler = lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lf)
+        # self.scheduler.last_epoch = 0
+        self.scheduler = lr_scheduler.CosineAnnealingLR(self.optimizer, epochs, eta_min=0, last_epoch=-1)
         self.epoch = 0
         self.best_loss = 99999
 
-        HighD_dataset = HighD_Dataset(X_len=10,X_step=1,Y_len=1,Y_step=1,diff=9,name='data_01',raw_dir='./dataset/')
+        HighD_dataset = HighD_Dataset(X_len=10,X_step=1,Y_len=1,Y_step=1,diff=9,name='data_01',raw_dir='./dataset/', preprocess_all=True,device=self.device)
 
         n_val = int(len(HighD_dataset) * config['val_percent'])
         n_train = len(HighD_dataset) - n_val
         train_dataset, val_dataset = random_split(HighD_dataset, [n_train, n_val], generator=torch.Generator().manual_seed(2021))
 
-        self.train_dataloader = GraphDataLoader(train_dataset, batch_size=1, shuffle=True, pin_memory=(self.device == "cuda"))
-        self.val_dataloader = GraphDataLoader(val_dataset, batch_size=1, shuffle=False, pin_memory=(self.device == "cuda"))
+        self.train_dataloader = GraphDataLoader(train_dataset, batch_size=32, shuffle=True, pin_memory=(self.device == "cuda"))
+        self.val_dataloader = GraphDataLoader(val_dataset, batch_size=32, shuffle=False, pin_memory=(self.device == "cuda"))
         print("Dataset Ready!")
 
     def save_checkpoint(self, checkpoint_path):
@@ -68,84 +69,24 @@ class Trainer:
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         self.epoch = checkpoint["epoch"]
 
-    def train_single_graph(self):
-        losses = AverageMeter()
-
-        self.model.train()
-        with tqdm(total=len(self.train_dataloader)) as pbar:
-            for i, (graph, X, Y, _mask) in enumerate(self.train_dataloader):
-                # 先不采用batch训练
-                X = X[0,...]
-                Y = Y[0,...]
-                # mask = mask[0,...]
-                if X.shape[1]==0:
-                    continue
-
-                ###### 临时！ 测试用mask
-                mask = torch.ones_like(X,dtype=torch.uint8)  #[10,N,2]
-                mask[9,np.random.randint(mask.shape[1]),:]=0
-                mask = mask.to(self.device)
-
-                output = self.model(graph, X*mask)  #[1,N,2]
-                loss = self.criterion(output,Y,mask)
-
-                self.optimizer.zero_grad()
-                loss.backward()
-                #TODO: 梯度裁剪等操作 √
-                # clip_grad_norm(model.parameters(), max_norm=10) 一个超参需要讨论
-                self.optimizer.step()
-                losses.update(loss.item())
-                pbar.set_description('Loss: {:.2f}'.format(loss.item()))
-                pbar.update()
-        
-        self.epoch += 1
-        return losses.avg
-
-    def eval_single_graph(self):
-        losses = AverageMeter()
-        self.model.eval()
-
-        with tqdm(total=len(self.val_dataloader),desc='Validation round') as pbar:
-            for i, (graph, X, Y, _mask) in enumerate(self.val_dataloader):
-                X = X[0,...]
-                Y = Y[0,...]
-                if X.shape[1]==0:
-                    continue
-
-                ###### 临时！ 测试用mask
-                mask = torch.ones_like(X,dtype=torch.uint8)  #[10,N,2]
-                mask[9,np.random.randint(mask.shape[1]),:]=0
-                mask = mask.to(self.device)
-
-                output = self.model(graph, X*mask)  #[1,N,2]
-                loss = self.criterion(output,Y,mask)
-
-                losses.update(loss.item())
-                pbar.update()
-
-        return losses.avg
-
-
     def train_multi_graph(self):
         losses = AverageMeter()
 
         self.model.train()
         with tqdm(total=len(self.train_dataloader)) as pbar:
-            for i, (X, Y, _mask) in enumerate(self.train_dataloader):
-                # 先不采用batch训练
-                X_feature = X['feature'][0,...]
-                Y_feature = Y['feature'][0,...]
-                # mask = mask[0,...]
-                if X_feature.shape[1]==0:
-                    continue
+            for i, (X, Y) in enumerate(self.train_dataloader):
+                # graph batch train
 
-                ###### 临时！ 测试用mask
-                mask = torch.ones_like(X_feature,dtype=torch.uint8)  #[10,N,2]
-                mask[9,np.random.randint(mask.shape[1]),:]=0
-                mask = mask.to(self.device)
+                # enable mask
+                X[-1].ndata['feature']=X[-1].ndata['feature']*X[-1].ndata['mask']
+                # get output from model
+                output = self.model(X,Y) 
 
-                output = self.model(X['graph'], X_feature*mask)  #[1,N,2]
-                loss = self.criterion(output,X_feature,mask)
+                # select data and calculate loss
+                predict = output[0,X[-1].ndata['mask']==0].view(-1,self.model._num_feats)
+                truth = Y[0].ndata['feature'][X[-1].ndata['mask']==0].view(-1,self.model._num_feats)
+                loss = self.criterion(predict,truth)
+                loss = loss.sum()
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -164,19 +105,19 @@ class Trainer:
         self.model.eval()
 
         with tqdm(total=len(self.val_dataloader),desc='Validation round') as pbar:
-            for i, (X, Y, _mask) in enumerate(self.val_dataloader):
-                X_feature = X['feature'][0,...]
-                Y_feature = Y['feature'][0,...]
-                if X_feature.shape[1]==0:
-                    continue
+            for i, (X, Y) in enumerate(self.train_dataloader):
+                # graph batch train
 
-                ###### 临时！ 测试用mask
-                mask = torch.ones_like(X_feature,dtype=torch.uint8)  #[10,N,2]
-                mask[9,np.random.randint(mask.shape[1]),:]=0
-                mask = mask.to(self.device)
+                # enable mask
+                X[-1].ndata['feature']=X[-1].ndata['feature']*X[-1].ndata['mask']
+                # get output from model
+                output = self.model(X,Y) 
 
-                output = self.model(X['graph'], X_feature*mask)  #[1,N,2]
-                loss = self.criterion(output,Y_feature,mask)
+                # select data and calculate loss
+                predict = output[0,X[-1].ndata['mask']==0].view(-1,self.model._num_feats)
+                truth = Y[0].ndata['feature'][X[-1].ndata['mask']==0].view(-1,self.model._num_feats)
+                loss = self.criterion(predict,truth)
+                loss = loss.mean()
 
                 losses.update(loss.item())
                 pbar.update()
@@ -186,7 +127,7 @@ class Trainer:
 
 
 MAX_EPOCH = 20
-CHECKPOINT_DIR = "ckpts/0404_multi_G/"
+CHECKPOINT_DIR = "ckpts/0405_1/"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="图卷积神经网络模型训练")
@@ -222,7 +163,7 @@ if __name__ == "__main__":
         # 检查参数与数据集匹配性 ×
 
         # 创建训练器
-        ctl = Trainer(modelconfig, device='cpu')
+        ctl = Trainer(modelconfig, device='cuda')
 
         # 读取存档
         if args.ckp is not None:
@@ -247,7 +188,7 @@ if __name__ == "__main__":
             # 自动存档
             if i % args.fckp == 0:
                 ctl.save_checkpoint(
-                    os.path.join(CHECKPOINT_DIR, "ckp%d.pth" % ctl.epoch)
+                    os.path.join(CHECKPOINT_DIR, "ckpt{}_loss_{:.4f}.pth" .format(ctl.epoch,train_loss))
                 )
                 with open(os.path.join(CHECKPOINT_DIR, "ckp.json"), "w") as f:
                     json.dump(

@@ -23,15 +23,15 @@ class Encoder(nn.Module):
         self._num_layers = num_layers
         self._hidden_size = hidden_size
 
+        self.projection_layer = nn.Linear(input_size, hidden_size)
         #除了第一层输入维数为input_size，输出维数为hidden_size
         #之后的每一层的GRU的输入输出维数相同为hidden_size
         #所有GRU上一层的输出作为下一层的输入，隐藏状态来自自身的上一时刻输出
-        self.GRUs = nn.ModuleList([ GRUCell(input_size, hidden_size) if i == 0
-                                   else GRUCell(hidden_size, hidden_size)
+        self.GRUs = nn.ModuleList([GRUCell(hidden_size, hidden_size)
                                    for i in range(self._num_layers)])
 
 
-    def forward(self, g, input, hx=None):
+    def forward(self, g, hx=None):
         """
         每一层GRU以上一层GRU的输出作为输入，
         每一时刻输入获得的GRU的隐藏状态传递给同一GRU的下一时刻
@@ -45,13 +45,14 @@ class Encoder(nn.Module):
         """
         #对序列首个输入进行初始化
         if hx is None:
-            hx = torch.zeros((self._num_layers, input.shape[0], self._hidden_size)).to(self.device)
+            hx = torch.zeros((self._num_layers, g.num_nodes(), self._hidden_size)).to(self.device)
 
         hidden_states = []
-        output = input
+        output = g.ndata['feature']
 
         #以上一层的输出为下一层输入
         #每个GRU的隐藏状态来自自身的上一时刻输出
+        output = self.projection_layer(output)
         for i, gru in enumerate(self.GRUs):
             next_hidden_state = gru(g, output, hx[i])
             hidden_states.append(next_hidden_state)
