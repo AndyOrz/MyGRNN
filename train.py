@@ -30,11 +30,19 @@ class Trainer:
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
-            self.device = device
+            self.device = config['device']
 
-        self.model = MyModel(num_feats=config['num_feats'], output_dim=config['num_feats'], hidden_size=64, num_layers=2,seq_len=10, horizon=1, device=self.device, bidirectional=True).to(self.device)
+        self.model = MyModel(
+            num_feats=config['num_feats'],
+            output_dim=config['num_feats'],
+            hidden_size=config['hidden_size'],
+            num_layers=config['num_layers'],
+            seq_len=config['X_len'],
+            horizon=config['Y_len'],
+            device=self.device,
+            bidirectional=bool(config['bidirectional'])).to(self.device)
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=config["lr"])
-        self.criterion = MyLoss(num_feats=config['num_feats']).to(self.device)
+        self.criterion = MyLoss(num_feats=config['num_feats'],loss_type=config['loss_type']).to(self.device)
         #学习率计划√
         # Scheduler https://arxiv.org/pdf/1812.01187.pdf
         epochs = config['epochs']
@@ -45,7 +53,16 @@ class Trainer:
         self.epoch = 0
         self.best_loss = 99999
 
-        HighD_dataset = HighD_Dataset(X_len=10,X_step=1,Y_len=1,Y_step=1,diff=9,name='data_01',raw_dir='./dataset/', preprocess_all=True,device=self.device)
+        HighD_dataset = HighD_Dataset(
+            X_len=config['X_len'],
+            X_step=config['X_step'],
+            Y_len=config['Y_len'],
+            Y_step=config['Y_step'],
+            diff=config['diff'],
+            name='data_01',
+            raw_dir='./dataset/',
+            preprocess_all=True,
+            device=self.device)
 
         n_val = int(len(HighD_dataset) * config['val_percent'])
         n_train = len(HighD_dataset) - n_val
@@ -80,13 +97,12 @@ class Trainer:
                 # enable mask
                 X[-1].ndata['feature']=X[-1].ndata['feature']*X[-1].ndata['mask']
                 # get output from model
-                output = self.model(X,Y) 
+                output = self.model(X,Y)
 
                 # select data and calculate loss
                 predict = output[0,X[-1].ndata['mask']==0].view(-1,self.model._num_feats)
                 truth = Y[0].ndata['feature'][X[-1].ndata['mask']==0].view(-1,self.model._num_feats)
                 loss = self.criterion(predict,truth)
-                loss = loss.sum()
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -96,7 +112,7 @@ class Trainer:
                 losses.update(loss.item())
                 pbar.set_description('Loss: {:.2f}'.format(loss.item()))
                 pbar.update()
-        
+
         self.epoch += 1
         return losses.avg
 
@@ -105,19 +121,18 @@ class Trainer:
         self.model.eval()
 
         with tqdm(total=len(self.val_dataloader),desc='Validation round') as pbar:
-            for i, (X, Y) in enumerate(self.train_dataloader):
+            for i, (X, Y) in enumerate(self.val_dataloader):
                 # graph batch train
 
                 # enable mask
                 X[-1].ndata['feature']=X[-1].ndata['feature']*X[-1].ndata['mask']
                 # get output from model
-                output = self.model(X,Y) 
+                output = self.model(X,Y)
 
                 # select data and calculate loss
                 predict = output[0,X[-1].ndata['mask']==0].view(-1,self.model._num_feats)
                 truth = Y[0].ndata['feature'][X[-1].ndata['mask']==0].view(-1,self.model._num_feats)
                 loss = self.criterion(predict,truth)
-                loss = loss.mean()
 
                 losses.update(loss.item())
                 pbar.update()
@@ -126,8 +141,8 @@ class Trainer:
 
 
 
-MAX_EPOCH = 20
-CHECKPOINT_DIR = "ckpts/0405_1/"
+MAX_EPOCH = 50
+CHECKPOINT_DIR = "ckpts/0406_1/"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="图卷积神经网络模型训练")
@@ -163,7 +178,7 @@ if __name__ == "__main__":
         # 检查参数与数据集匹配性 ×
 
         # 创建训练器
-        ctl = Trainer(modelconfig, device='cuda')
+        ctl = Trainer(modelconfig, device=modelconfig['device'])
 
         # 读取存档
         if args.ckp is not None:

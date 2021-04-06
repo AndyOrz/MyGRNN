@@ -23,11 +23,11 @@ class Encoder(nn.Module):
         self._num_layers = num_layers
         self._hidden_size = hidden_size
 
-        self.projection_layer = nn.Linear(input_size, hidden_size)
         #除了第一层输入维数为input_size，输出维数为hidden_size
         #之后的每一层的GRU的输入输出维数相同为hidden_size
         #所有GRU上一层的输出作为下一层的输入，隐藏状态来自自身的上一时刻输出
-        self.GRUs = nn.ModuleList([GRUCell(hidden_size, hidden_size)
+        self.GRUs = nn.ModuleList([ GRUCell(input_size, hidden_size) if i == 0
+                                   else GRUCell(hidden_size, hidden_size)
                                    for i in range(self._num_layers)])
 
 
@@ -52,7 +52,6 @@ class Encoder(nn.Module):
 
         #以上一层的输出为下一层输入
         #每个GRU的隐藏状态来自自身的上一时刻输出
-        output = self.projection_layer(output)
         for i, gru in enumerate(self.GRUs):
             next_hidden_state = gru(g, output, hx[i])
             hidden_states.append(next_hidden_state)

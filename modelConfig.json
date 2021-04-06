@@ -1,5 +1,15 @@
 {
-    "val_percent" : 0.2,
-    "lr": 0.005,
-    "num_feats": 2
+    "val_percent": 0.2,
+    "lr": 0.01,
+    "num_feats": 2,
+    "hidden_size": 64,
+    "num_layers": 3,
+    "X_len": 10,
+    "X_step": 1,
+    "Y_len": 1,
+    "Y_step": 1,
+    "diff": 9,
+    "device": "cuda",
+    "bidirectional": "False",
+    "loss_type":"l1loss"
 }
